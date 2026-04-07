@@ -18,6 +18,7 @@ const historyArea = document.getElementById('historyArea');
 const historyList = document.getElementById('historyList');
 const viewHistoryBtn = document.getElementById('viewHistoryBtn');
 const tokenModal = document.getElementById('tokenModal');
+const excelImport = document.getElementById('excelImport');
 
 document.getElementById('saveConfigBtn').onclick = () => {
     githubToken = document.getElementById('githubToken').value;
@@ -167,6 +168,7 @@ async function updateFile(path, content, sha, message) {
     return res;
 }
 
+// History Toggle
 viewHistoryBtn.onclick = async () => {
     const isHistory = historyArea.style.display === 'block';
     historyArea.style.display = isHistory ? 'none' : 'block';
@@ -186,5 +188,42 @@ viewHistoryBtn.onclick = async () => {
         `).join('');
     }
 };
+
+// Excel Import Logic
+excelImport.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+        const data = evt.target.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        // Map Excel rows to Rule objects
+        const newRules = json.slice(1).map((row, index) => ({
+            id: 'rule_' + index,
+            iso20022Index: row[0] || "",
+            iso20022Mult: row[1] || "",
+            iso20022MessageElement: row[2] || "",
+            iso20022XmlTag: row[3] || "",
+            iso20022XmlPath: row[4] || "",
+            isoDataType: row[5] || "",
+            sepaCoreRequirements: row[6] || "",
+            statusIsoEpc: row[7] || "",
+            stdInContentRules: row[8] || "",
+            stdInComments: row[9] || "",
+            stdOutContentRules: row[10] || "",
+            stdOutComments: row[11] || ""
+        })).filter(r => r.iso20022XmlTag);
+
+        if (confirm(`Import ${newRules.size || newRules.length} tags from Excel to GitHub?`)) {
+            await updateFile('data.json', JSON.stringify(newRules, null, 2), dataSha, "Import data from Excel");
+            alert("Upload successful! Refreshing...");
+            location.reload();
+        }
+    };
+    reader.readAsBinaryString(file);
+});
 
 searchInput.oninput = renderTags;
