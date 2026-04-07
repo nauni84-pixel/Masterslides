@@ -37,10 +37,14 @@
                 <div id="tagList"><div class="text-center p-5"><div class="spinner-border spinner-border-sm"></div></div></div>
             </div>
             <div class="col-md-9 content">
-                <nav class="navbar navbar-light bg-light mb-4 px-3 shadow-sm rounded">
+                <nav class="navbar navbar-light bg-light mb-4 px-3 shadow-sm rounded d-flex justify-content-between">
                     <span class="navbar-brand mb-0 h1">Rules Manager</span>
                     <div id="userInfo">
-                        <span id="currentUserDisplay" class="badge bg-dark"></span>
+                        <input type="file" id="excelImport" style="display:none" accept=".xlsx, .xlsm">
+                        <button class="btn btn-sm btn-outline-success" onclick="document.getElementById('excelImport').click()">
+                            <i class="fas fa-file-excel"></i> Import Excel
+                        </button>
+                        <span id="currentUserDisplay" class="badge bg-dark ms-2"></span>
                         <button id="viewHistoryBtn" class="btn btn-sm btn-outline-secondary ms-2">Commits</button>
                     </div>
                 </nav>
@@ -52,6 +56,9 @@
             </div>
         </div>
     </div>
+
+    <!-- Excel Parsing Library -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
