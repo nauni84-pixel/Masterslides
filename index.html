@@ -16,6 +16,7 @@
         .lock-badge { font-size: 0.7rem; }
         .history-card { border-left: 4px solid #198754; margin-bottom: 10px; }
         #tokenModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .dataset-selector { margin-bottom: 15px; }
     </style>
 </head>
 <body>
@@ -32,6 +33,11 @@
     <div class="container-fluid">
         <div class="row">
             <div class="col-md-3 sidebar p-3">
+                <h5 class="mb-3">Datasets</h5>
+                <select id="datasetSelect" class="form-select dataset-selector">
+                    <option value="">Select Dataset</option>
+                </select>
+                <hr>
                 <h5 class="mb-3">XML Tags</h5>
                 <input type="text" id="searchInput" class="form-control mb-3" placeholder="Search tags...">
                 <div id="tagList"><div class="text-center p-5"><div class="spinner-border spinner-border-sm"></div></div></div>
@@ -39,11 +45,13 @@
             <div class="col-md-9 content">
                 <nav class="navbar navbar-light bg-light mb-4 px-3 shadow-sm rounded d-flex justify-content-between">
                     <span class="navbar-brand mb-0 h1">Rules Manager</span>
-                    <div id="userInfo">
+                    <div id="userInfo" class="d-flex align-items-center">
                         <input type="file" id="excelImport" style="display:none" accept=".xlsx, .xlsm">
-                        <button class="btn btn-sm btn-outline-success" onclick="document.getElementById('excelImport').click()">
-                            <i class="fas fa-file-excel"></i> Import Excel
-                        </button>
+                        <div id="adminControls" style="display:none">
+                            <button class="btn btn-sm btn-outline-success" onclick="document.getElementById('excelImport').click()">
+                                <i class="fas fa-file-excel"></i> Import Excel
+                            </button>
+                        </div>
                         <span id="currentUserDisplay" class="badge bg-dark ms-2"></span>
                         <button id="viewHistoryBtn" class="btn btn-sm btn-outline-secondary ms-2">Commits</button>
                     </div>

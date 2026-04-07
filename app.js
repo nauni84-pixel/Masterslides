@@ -2,6 +2,7 @@
 let githubUser = "nauni84-pixel";
 let githubRepo = "MasterSlides";
 let githubToken = "";
+let currentDataset = ""; // Filename in repo
 let dataSha = null;
 let lockSha = null;
 
@@ -9,6 +10,9 @@ let allRules = [];
 let locks = {};
 let selectedRuleId = null;
 let currentUser = "";
+let isAdmin = false;
+
+const ADMIN_USER = "nauni84-pixel"; // Set your username here
 
 // DOM Elements
 const tagList = document.getElementById('tagList');
@@ -19,6 +23,8 @@ const historyList = document.getElementById('historyList');
 const viewHistoryBtn = document.getElementById('viewHistoryBtn');
 const tokenModal = document.getElementById('tokenModal');
 const excelImport = document.getElementById('excelImport');
+const datasetSelect = document.getElementById('datasetSelect');
+const adminControls = document.getElementById('adminControls');
 
 document.getElementById('saveConfigBtn').onclick = () => {
     githubToken = document.getElementById('githubToken').value;
@@ -35,9 +41,12 @@ async function initApp() {
         if (!userRes.ok) throw new Error("Invalid Token");
         const userData = await userRes.json();
         currentUser = userData.login;
-        document.getElementById('currentUserDisplay').innerText = currentUser;
+        isAdmin = (currentUser === ADMIN_USER);
 
-        await refreshData();
+        document.getElementById('currentUserDisplay').innerText = currentUser;
+        if (isAdmin) adminControls.style.display = 'block';
+
+        await loadDatasetList();
         setInterval(refreshData, 30000);
     } catch (e) {
         alert("GitHub Auth Failed: " + e.message);
@@ -45,9 +54,26 @@ async function initApp() {
     }
 }
 
+async function loadDatasetList() {
+    const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/`, {
+        headers: { 'Authorization': `token ${githubToken}` }
+    });
+    const files = await res.json();
+    const datasets = files.filter(f => f.name.endsWith('.json') && f.name !== 'lock.json');
+
+    datasetSelect.innerHTML = '<option value="">Select Dataset</option>' +
+        datasets.map(d => `<option value="${d.name}">${d.name.replace('.json', '')}</option>`).join('');
+}
+
+datasetSelect.onchange = (e) => {
+    currentDataset = e.target.value;
+    if (currentDataset) refreshData();
+};
+
 async function refreshData() {
+    if (!currentDataset) return;
     try {
-        const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/data.json`, {
+        const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${currentDataset}`, {
             headers: { 'Authorization': `token ${githubToken}` }
         });
         if (res.ok) {
@@ -70,9 +96,7 @@ async function refreshData() {
 
         renderTags();
         if (selectedRuleId) renderEditor();
-    } catch (e) {
-        console.error("Sync error:", e);
-    }
+    } catch (e) { console.error("Sync error:", e); }
 }
 
 function renderTags() {
@@ -81,7 +105,8 @@ function renderTags() {
         .filter(r => r.iso20022XmlTag.toLowerCase().includes(filter))
         .map(rule => `
             <div class="tag-item ${rule.id === selectedRuleId ? 'active' : ''}" onclick="selectTag('${rule.id}')">
-                <div class="fw-bold">${rule.iso20022XmlTag}</div>
+                <div class="fw-bold text-dark">${rule.iso20022XmlTag}</div>
+                <div class="small text-muted" style="font-size: 0.75rem;">${rule.iso20022XmlPath.substring(0, 40)}...</div>
                 ${locks[rule.id] ? `<span class="badge bg-danger lock-badge"><i class="fas fa-lock"></i> ${locks[rule.id]}</span>` : ''}
             </div>
         `).join('');
@@ -120,7 +145,7 @@ function renderEditor() {
                     ${!locks[rule.id] ?
                         `<button onclick="toggleLock('${rule.id}', true)" class="btn btn-primary btn-sm">Start Editing</button>` :
                         (isLockedByMe ?
-                            `<button onclick="saveChanges()" class="btn btn-success btn-sm">Commit Changes</button>
+                            `<button onclick="saveChanges()" class="btn btn-success btn-sm">Commit Changes (New Version)</button>
                              <button onclick="toggleLock('${rule.id}', false)" class="btn btn-link btn-sm text-muted">Cancel</button>` :
                             `<button class="btn btn-secondary btn-sm" disabled>View Only</button>`)
                     }
@@ -145,15 +170,16 @@ async function saveChanges() {
 
     delete locks[rule.id];
 
-    await updateFile('data.json', JSON.stringify(allRules, null, 2), dataSha, `Update rule for ${rule.iso20022XmlTag}`);
+    // Every save creates a commit on GitHub automatically (Version Control)
+    await updateFile(currentDataset, JSON.stringify(allRules, null, 2), dataSha, `Update ${rule.iso20022XmlTag} in ${currentDataset}`);
     await updateFile('lock.json', JSON.stringify(locks), lockSha, "Releasing lock");
 
-    alert("Changes committed to GitHub!");
+    alert("Changes committed as a new version on GitHub!");
     await refreshData();
 }
 
 async function updateFile(path, content, sha, message) {
-    const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${path}`, {
+    return fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${path}`, {
         method: 'PUT',
         headers: {
             'Authorization': `token ${githubToken}`,
@@ -165,17 +191,55 @@ async function updateFile(path, content, sha, message) {
             sha: sha
         })
     });
-    return res;
 }
 
-// History Toggle
+// Excel Import Logic
+excelImport.addEventListener('change', (e) => {
+    if (!isAdmin) return alert("Only Admin can import Excel files.");
+
+    const file = e.target.files[0];
+    const fileName = file.name.replace(/\.[^/.]+$/, "") + ".json";
+
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+        const data = evt.target.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+
+        const newRules = json.slice(1).map((row, index) => ({
+            id: 'rule_' + index,
+            iso20022XmlTag: row[3] || "Unnamed Tag",
+            iso20022XmlPath: row[4] || "No Path",
+            stdInContentRules: row[8] || "",
+            stdOutContentRules: row[10] || ""
+        })).filter(r => r.iso20022XmlTag !== "Unnamed Tag");
+
+        // Check if exists
+        const check = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${fileName}`, {
+            headers: { 'Authorization': `token ${githubToken}` }
+        });
+
+        if (check.ok) {
+            if (!confirm(`Warning: Dataset "${fileName}" already exists. Overwrite?`)) return;
+            const existing = await check.json();
+            await updateFile(fileName, JSON.stringify(newRules, null, 2), existing.sha, "Overwriting dataset");
+        } else {
+            await updateFile(fileName, JSON.stringify(newRules, null, 2), null, "Initial import");
+        }
+
+        alert("Import successful!");
+        loadDatasetList();
+    };
+    reader.readAsBinaryString(file);
+});
+
 viewHistoryBtn.onclick = async () => {
     const isHistory = historyArea.style.display === 'block';
     historyArea.style.display = isHistory ? 'none' : 'block';
     editorArea.style.display = isHistory ? 'block' : 'none';
-
     if (!isHistory) {
-        const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits`, {
+        const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits?path=${currentDataset}`, {
             headers: { 'Authorization': `token ${githubToken}` }
         });
         const commits = await res.json();
@@ -188,42 +252,5 @@ viewHistoryBtn.onclick = async () => {
         `).join('');
     }
 };
-
-// Excel Import Logic
-excelImport.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-        const data = evt.target.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const firstSheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[firstSheetName];
-        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-        // Map Excel rows to Rule objects
-        const newRules = json.slice(1).map((row, index) => ({
-            id: 'rule_' + index,
-            iso20022Index: row[0] || "",
-            iso20022Mult: row[1] || "",
-            iso20022MessageElement: row[2] || "",
-            iso20022XmlTag: row[3] || "",
-            iso20022XmlPath: row[4] || "",
-            isoDataType: row[5] || "",
-            sepaCoreRequirements: row[6] || "",
-            statusIsoEpc: row[7] || "",
-            stdInContentRules: row[8] || "",
-            stdInComments: row[9] || "",
-            stdOutContentRules: row[10] || "",
-            stdOutComments: row[11] || ""
-        })).filter(r => r.iso20022XmlTag);
-
-        if (confirm(`Import ${newRules.size || newRules.length} tags from Excel to GitHub?`)) {
-            await updateFile('data.json', JSON.stringify(newRules, null, 2), dataSha, "Import data from Excel");
-            alert("Upload successful! Refreshing...");
-            location.reload();
-        }
-    };
-    reader.readAsBinaryString(file);
-});
 
 searchInput.oninput = renderTags;
