@@ -3,70 +3,948 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>XML Filling Rules Manager (GitHub Edition)</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <title>XML Rules Manager — GitHub Edition</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { background-color: #f8f9fa; }
-        .sidebar { height: 100vh; overflow-y: auto; border-right: 1px solid #dee2e6; background: white; }
-        .content { height: 100vh; overflow-y: auto; padding: 20px; }
-        .tag-item { cursor: pointer; padding: 10px; border-bottom: 1px solid #eee; }
-        .tag-item:hover { background-color: #f0f7ff; }
-        .tag-item.active { background-color: #e7f1ff; border-left: 4px solid #0d6efd; }
-        .lock-badge { font-size: 0.7rem; }
-        .history-card { border-left: 4px solid #198754; margin-bottom: 10px; }
-        #tokenModal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; display: flex; align-items: center; justify-content: center; }
-        .dataset-selector { margin-bottom: 15px; }
+        :root {
+            --bg: #0d1117;
+            --surface: #161b22;
+            --surface2: #1c2130;
+            --border: #2d3748;
+            --border2: #374151;
+            --text: #e6edf3;
+            --text-muted: #7d8fa9;
+            --accent: #f0b429;
+            --accent2: #e07b39;
+            --green: #3fb950;
+            --red: #f85149;
+            --blue: #58a6ff;
+            --radius: 10px;
+            --sidebar-w: 300px;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Syne', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── LOGIN MODAL ── */
+        #loginOverlay {
+            position: fixed; inset: 0;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            z-index: 9999;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .login-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 40px;
+            width: 420px;
+            box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+            animation: slideUp .35s cubic-bezier(.22,1,.36,1);
+        }
+        @keyframes slideUp {
+            from { opacity:0; transform: translateY(24px); }
+            to   { opacity:1; transform: translateY(0); }
+        }
+        .login-logo {
+            display: flex; align-items: center; gap: 12px;
+            margin-bottom: 28px;
+        }
+        .login-logo .icon-wrap {
+            width: 44px; height: 44px;
+            background: var(--accent);
+            border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            color: #000; font-size: 20px;
+        }
+        .login-logo h2 { font-size: 1.2rem; font-weight: 800; }
+        .login-logo p  { font-size: .75rem; color: var(--text-muted); margin-top: 2px; }
+        .field-label {
+            font-size: .75rem; font-weight: 600;
+            color: var(--text-muted); letter-spacing: .08em;
+            text-transform: uppercase; margin-bottom: 6px;
+        }
+        .text-input {
+            width: 100%;
+            background: var(--bg);
+            border: 1px solid var(--border2);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 10px 14px;
+            font-family: 'Space Mono', monospace;
+            font-size: .85rem;
+            transition: border-color .2s;
+            outline: none;
+        }
+        .text-input:focus { border-color: var(--accent); }
+        .btn-primary {
+            width: 100%;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'Syne', sans-serif;
+            font-size: .9rem;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 16px;
+            transition: opacity .2s, transform .1s;
+        }
+        .btn-primary:hover { opacity: .9; }
+        .btn-primary:active { transform: scale(.98); }
+        .btn-primary:disabled { opacity: .4; cursor: not-allowed; }
+        .login-footer { text-align: center; margin-top: 14px; }
+        .login-footer a { color: var(--accent); font-size: .8rem; text-decoration: none; }
+        .login-footer a:hover { text-decoration: underline; }
+        #loginError {
+            background: rgba(248,81,73,.15);
+            border: 1px solid rgba(248,81,73,.4);
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: .82rem;
+            color: var(--red);
+            margin-top: 12px;
+            display: none;
+        }
+
+        /* ── TOP BAR ── */
+        #topBar {
+            height: 56px;
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex; align-items: center;
+            padding: 0 20px;
+            gap: 16px;
+            flex-shrink: 0;
+        }
+        .topbar-logo {
+            display: flex; align-items: center; gap: 10px;
+        }
+        .topbar-logo .dot {
+            width: 28px; height: 28px;
+            background: var(--accent);
+            border-radius: 7px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; color: #000;
+        }
+        .topbar-logo span { font-weight: 800; font-size: .95rem; }
+        .topbar-logo small { color: var(--text-muted); font-size: .7rem; margin-left: 4px; font-weight: 400; }
+
+        .topbar-sep { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+
+        #datasetSelect {
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 6px 32px 6px 12px;
+            font-family: 'Syne', sans-serif;
+            font-size: .82rem;
+            font-weight: 600;
+            outline: none;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%237d8fa9' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            transition: border-color .2s;
+        }
+        #datasetSelect:focus { border-color: var(--accent); }
+
+        .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+
+        .pill-btn {
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            color: var(--text-muted);
+            border-radius: 8px;
+            padding: 6px 14px;
+            font-family: 'Syne', sans-serif;
+            font-size: .78rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex; align-items: center; gap: 6px;
+            transition: all .2s;
+        }
+        .pill-btn:hover { border-color: var(--accent); color: var(--accent); }
+        .pill-btn.active { background: rgba(240,180,41,.12); border-color: var(--accent); color: var(--accent); }
+        .pill-btn.green:hover { border-color: var(--green); color: var(--green); }
+
+        .user-chip {
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 20px;
+            padding: 4px 12px 4px 4px;
+            display: flex; align-items: center; gap: 8px;
+            font-size: .78rem; font-weight: 600;
+        }
+        .user-avatar {
+            width: 26px; height: 26px;
+            background: linear-gradient(135deg, var(--accent), var(--accent2));
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; color: #000; font-weight: 700;
+        }
+        .admin-badge {
+            background: rgba(240,180,41,.2);
+            color: var(--accent);
+            border-radius: 4px;
+            padding: 1px 6px;
+            font-size: .65rem;
+            font-weight: 700;
+            letter-spacing: .06em;
+        }
+
+        /* ── LAYOUT ── */
+        #app {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* ── SIDEBAR ── */
+        #sidebar {
+            width: var(--sidebar-w);
+            flex-shrink: 0;
+            background: var(--surface);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .sidebar-head {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+        .search-wrap {
+            position: relative;
+        }
+        .search-wrap i {
+            position: absolute;
+            left: 12px; top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+            font-size: .82rem;
+        }
+        #searchInput {
+            width: 100%;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 8px;
+            color: var(--text);
+            padding: 8px 12px 8px 34px;
+            font-family: 'Syne', sans-serif;
+            font-size: .82rem;
+            outline: none;
+            transition: border-color .2s;
+        }
+        #searchInput:focus { border-color: var(--accent); }
+        #searchInput::placeholder { color: var(--text-muted); }
+
+        #tagCount {
+            font-size: .7rem;
+            color: var(--text-muted);
+            padding: 8px 16px 4px;
+            font-weight: 600;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+        }
+
+        #tagList {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px 0 16px;
+        }
+        #tagList::-webkit-scrollbar { width: 4px; }
+        #tagList::-webkit-scrollbar-track { background: transparent; }
+        #tagList::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+        .tag-item {
+            display: flex; align-items: flex-start;
+            gap: 10px;
+            padding: 10px 16px;
+            cursor: pointer;
+            border-left: 3px solid transparent;
+            transition: all .15s;
+            position: relative;
+        }
+        .tag-item:hover { background: var(--surface2); border-left-color: var(--border2); }
+        .tag-item.active { background: rgba(240,180,41,.08); border-left-color: var(--accent); }
+        .tag-icon {
+            width: 30px; height: 30px;
+            background: var(--surface2);
+            border-radius: 6px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: .72rem;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            font-family: 'Space Mono', monospace;
+            font-weight: 700;
+        }
+        .tag-item.active .tag-icon { background: rgba(240,180,41,.15); color: var(--accent); }
+        .tag-info { flex: 1; min-width: 0; }
+        .tag-name {
+            font-weight: 700;
+            font-size: .83rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .tag-path {
+            font-size: .7rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-family: 'Space Mono', monospace;
+            margin-top: 2px;
+        }
+        .lock-icon {
+            font-size: .65rem;
+            color: var(--red);
+            flex-shrink: 0;
+            margin-top: 4px;
+        }
+        .lock-me { color: var(--accent); }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-muted);
+        }
+        .empty-state i { font-size: 2rem; margin-bottom: 10px; opacity: .4; }
+        .empty-state p { font-size: .82rem; }
+
+        /* ── MAIN CONTENT ── */
+        #main {
+            flex: 1;
+            overflow-y: auto;
+            padding: 28px 32px;
+            background: var(--bg);
+        }
+        #main::-webkit-scrollbar { width: 4px; }
+        #main::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 4px; }
+
+        /* Welcome screen */
+        #welcomeScreen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            text-align: center;
+        }
+        .welcome-icon {
+            width: 72px; height: 72px;
+            background: rgba(240,180,41,.12);
+            border-radius: 18px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 2rem;
+            color: var(--accent);
+            margin-bottom: 20px;
+        }
+        #welcomeScreen h2 { font-size: 1.4rem; font-weight: 800; margin-bottom: 8px; }
+        #welcomeScreen p { color: var(--text-muted); font-size: .88rem; max-width: 320px; line-height: 1.6; }
+
+        /* Editor */
+        #editorArea { display: none; }
+
+        .editor-header {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .editor-tag-icon {
+            width: 48px; height: 48px;
+            background: rgba(240,180,41,.12);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            color: var(--accent);
+            font-family: 'Space Mono', monospace;
+            font-size: 1rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+        .editor-header h2 { font-size: 1.3rem; font-weight: 800; }
+        .editor-path {
+            font-family: 'Space Mono', monospace;
+            font-size: .72rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+            word-break: break-all;
+        }
+
+        .lock-banner {
+            display: flex; align-items: center; gap: 10px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: .82rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+        .lock-banner.locked-other { background: rgba(248,81,73,.1); border: 1px solid rgba(248,81,73,.3); color: var(--red); }
+        .lock-banner.locked-me { background: rgba(240,180,41,.1); border: 1px solid rgba(240,180,41,.3); color: var(--accent); }
+
+        .fields-grid { display: grid; gap: 20px; }
+        .field-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            overflow: hidden;
+        }
+        .field-card-head {
+            display: flex; align-items: center; gap: 10px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            background: var(--surface2);
+        }
+        .field-card-badge {
+            background: rgba(240,180,41,.15);
+            color: var(--accent);
+            font-size: .65rem;
+            font-weight: 700;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            padding: 2px 8px;
+            border-radius: 4px;
+        }
+        .field-card-badge.blue {
+            background: rgba(88,166,255,.15);
+            color: var(--blue);
+        }
+        .field-card-title { font-weight: 700; font-size: .85rem; }
+        .field-textarea {
+            width: 100%;
+            background: transparent;
+            border: none;
+            color: var(--text);
+            padding: 14px 16px;
+            font-family: 'Space Mono', monospace;
+            font-size: .8rem;
+            line-height: 1.6;
+            resize: vertical;
+            min-height: 120px;
+            outline: none;
+        }
+        .field-textarea:disabled { color: var(--text-muted); cursor: not-allowed; }
+        .field-textarea::placeholder { color: var(--border2); }
+
+        .editor-actions {
+            display: flex; gap: 10px;
+            margin-top: 24px;
+            align-items: center;
+        }
+        .btn-action {
+            display: flex; align-items: center; gap: 8px;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-family: 'Syne', sans-serif;
+            font-size: .85rem;
+            font-weight: 700;
+            cursor: pointer;
+            border: none;
+            transition: all .2s;
+        }
+        .btn-edit { background: var(--accent); color: #000; }
+        .btn-edit:hover { opacity: .88; }
+        .btn-commit { background: var(--green); color: #000; }
+        .btn-commit:hover { opacity: .88; }
+        .btn-cancel {
+            background: transparent;
+            border: 1px solid var(--border2);
+            color: var(--text-muted);
+        }
+        .btn-cancel:hover { border-color: var(--red); color: var(--red); }
+        .btn-disabled { background: var(--surface2); color: var(--text-muted); cursor: not-allowed; opacity: .6; }
+
+        /* History */
+        #historyArea { display: none; }
+        #historyArea h2 { font-size: 1.2rem; font-weight: 800; margin-bottom: 20px; }
+        .commit-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--green);
+            border-radius: var(--radius);
+            padding: 14px 18px;
+            margin-bottom: 10px;
+            animation: fadeIn .2s ease;
+        }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+        .commit-author { font-weight: 700; font-size: .88rem; display: flex; align-items: center; gap: 8px; }
+        .commit-author .gh-icon { color: var(--text-muted); font-size: .8rem; }
+        .commit-msg { font-size: .82rem; color: var(--text-muted); margin-top: 4px; font-family: 'Space Mono', monospace; }
+        .commit-time { font-size: .72rem; color: var(--border2); margin-top: 6px; }
+
+        /* Toast */
+        #toast {
+            position: fixed;
+            bottom: 24px; right: 24px;
+            background: var(--surface2);
+            border: 1px solid var(--border2);
+            border-radius: 10px;
+            padding: 12px 18px;
+            display: flex; align-items: center; gap: 10px;
+            font-size: .85rem; font-weight: 600;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+            opacity: 0;
+            transform: translateY(12px);
+            transition: all .3s cubic-bezier(.22,1,.36,1);
+            z-index: 9998;
+            pointer-events: none;
+        }
+        #toast.show { opacity: 1; transform: translateY(0); }
+        #toast.success { border-left: 3px solid var(--green); }
+        #toast.error   { border-left: 3px solid var(--red); }
+        #toast.info    { border-left: 3px solid var(--accent); }
+
+        /* Spinner */
+        .spin { animation: spin .8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Loading state */
+        .skeleton {
+            background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.4s infinite;
+            border-radius: 6px;
+            height: 12px;
+        }
+        @keyframes shimmer { to { background-position: -200% 0; } }
+        .skeleton-row { display: flex; flex-direction: column; gap: 6px; padding: 12px 16px; }
+
+        input[type="file"] { display: none; }
+
+        /* Status dot */
+        .status-dot {
+            width: 7px; height: 7px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 6px var(--green);
+        }
     </style>
 </head>
 <body>
-    <div id="tokenModal">
-        <div class="card p-4 shadow-lg" style="width: 400px;">
-            <h5 class="card-title"><i class="fab fa-github"></i> GitHub Connect</h5>
-            <p class="small text-muted">Enter your GitHub Personal Access Token to enable editing.</p>
-            <input type="password" id="githubToken" class="form-control mb-3" placeholder="ghp_xxxxxxxxxxxx">
-            <button id="saveConfigBtn" class="btn btn-primary w-100">Login to Dashboard</button>
-            <div class="mt-2 text-center small"><a href="https://github.com/settings/tokens" target="_blank">Get token here</a></div>
+
+<!-- LOGIN OVERLAY -->
+<div id="loginOverlay">
+    <div class="login-card">
+        <div class="login-logo">
+            <div class="icon-wrap"><i class="fab fa-github"></i></div>
+            <div>
+                <h2>XML Rules Manager</h2>
+                <p>GitHub Edition · Secure Login</p>
+            </div>
+        </div>
+        <div class="field-label">GitHub Personal Access Token</div>
+        <input type="password" id="githubToken" class="text-input" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off">
+        <button id="loginBtn" class="btn-primary">
+            <i class="fab fa-github"></i> &nbsp;Connect to GitHub
+        </button>
+        <div id="loginError"></div>
+        <div class="login-footer">
+            <a href="https://github.com/settings/tokens" target="_blank">
+                <i class="fas fa-external-link-alt" style="font-size:.7rem"></i> Generate a token
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- TOP BAR -->
+<div id="topBar">
+    <div class="topbar-logo">
+        <div class="dot"><i class="fas fa-code" style="font-size:12px"></i></div>
+        <span>XML Rules<small>Manager</small></span>
+    </div>
+    <div class="topbar-sep"></div>
+    <i class="fas fa-database" style="color:var(--text-muted); font-size:.8rem"></i>
+    <select id="datasetSelect">
+        <option value="">Select Dataset…</option>
+    </select>
+    <div class="topbar-right">
+        <div class="status-dot" id="statusDot" style="display:none"></div>
+        <input type="file" id="excelImport" accept=".xlsx,.xlsm">
+        <button class="pill-btn green" id="importBtn" style="display:none" onclick="document.getElementById('excelImport').click()">
+            <i class="fas fa-file-excel"></i> Import Excel
+        </button>
+        <button class="pill-btn" id="historyBtn">
+            <i class="fas fa-history"></i> Commits
+        </button>
+        <div class="user-chip" id="userChip" style="display:none">
+            <div class="user-avatar" id="userAvatar"></div>
+            <span id="userDisplay"></span>
+            <span class="admin-badge" id="adminBadge" style="display:none">ADMIN</span>
+        </div>
+    </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+    <!-- SIDEBAR -->
+    <div id="sidebar">
+        <div class="sidebar-head">
+            <div class="search-wrap">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" placeholder="Search XML tags…">
+            </div>
+        </div>
+        <div id="tagCount"></div>
+        <div id="tagList">
+            <div class="empty-state">
+                <i class="fas fa-database"></i>
+                <p>Select a dataset above to get started</p>
+            </div>
         </div>
     </div>
 
-    <div class="container-fluid">
-        <div class="row">
-            <div class="col-md-3 sidebar p-3">
-                <h5 class="mb-3">Datasets</h5>
-                <select id="datasetSelect" class="form-select dataset-selector">
-                    <option value="">Select Dataset</option>
-                </select>
-                <hr>
-                <h5 class="mb-3">XML Tags</h5>
-                <input type="text" id="searchInput" class="form-control mb-3" placeholder="Search tags...">
-                <div id="tagList"><div class="text-center p-5"><div class="spinner-border spinner-border-sm"></div></div></div>
+    <!-- CONTENT -->
+    <div id="main">
+        <div id="welcomeScreen">
+            <div class="welcome-icon"><i class="fas fa-code-branch"></i></div>
+            <h2>Select an XML Tag</h2>
+            <p>Choose a dataset from the top bar, then pick a tag from the sidebar to view and edit its filling rules.</p>
+        </div>
+
+        <div id="editorArea"></div>
+
+        <div id="historyArea">
+            <h2><i class="fas fa-history" style="color:var(--green); margin-right:10px"></i>Commit History</h2>
+            <div id="historyList"></div>
+        </div>
+    </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"><i id="toastIcon"></i><span id="toastMsg"></span></div>
+
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────
+let githubUser  = "nauni84-pixel";
+let githubRepo  = "MasterSlides";
+let githubToken = "";
+let currentDataset = "";
+let dataSha  = null;
+let lockSha  = null;
+let allRules = [];
+let locks    = {};
+let selectedRuleId = null;
+let currentUser = "";
+let isAdmin     = false;
+const ADMIN_USER = "nauni84-pixel";
+
+// ─── DOM REFS ─────────────────────────────────────────────────────
+const loginOverlay  = document.getElementById('loginOverlay');
+const loginBtn      = document.getElementById('loginBtn');
+const loginError    = document.getElementById('loginError');
+const datasetSelect = document.getElementById('datasetSelect');
+const tagList       = document.getElementById('tagList');
+const tagCount      = document.getElementById('tagCount');
+const searchInput   = document.getElementById('searchInput');
+const editorArea    = document.getElementById('editorArea');
+const historyArea   = document.getElementById('historyArea');
+const historyList   = document.getElementById('historyList');
+const historyBtn    = document.getElementById('historyBtn');
+const welcomeScreen = document.getElementById('welcomeScreen');
+const importBtn     = document.getElementById('importBtn');
+const excelImport   = document.getElementById('excelImport');
+const userChip      = document.getElementById('userChip');
+const userDisplay   = document.getElementById('userDisplay');
+const userAvatar    = document.getElementById('userAvatar');
+const adminBadge    = document.getElementById('adminBadge');
+const statusDot     = document.getElementById('statusDot');
+
+// ─── TOAST ────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, type = 'info') {
+    const t = document.getElementById('toast');
+    const icons = { success: 'fas fa-check-circle', error: 'fas fa-exclamation-circle', info: 'fas fa-bolt' };
+    const colors = { success: 'var(--green)', error: 'var(--red)', info: 'var(--accent)' };
+    document.getElementById('toastIcon').className = icons[type];
+    document.getElementById('toastIcon').style.color = colors[type];
+    document.getElementById('toastMsg').textContent = msg;
+    t.className = `show ${type}`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.className = '', 3000);
+}
+
+// ─── AUTH / LOGIN ─────────────────────────────────────────────────
+loginBtn.onclick = async () => {
+    const token = document.getElementById('githubToken').value.trim();
+    if (!token) { loginError.textContent = 'Token is required.'; loginError.style.display = 'block'; return; }
+    loginBtn.disabled = true;
+    loginBtn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i>  Connecting…';
+    loginError.style.display = 'none';
+    try {
+        const res = await fetch('https://api.github.com/user', {
+            headers: { 'Authorization': `token ${token}` }
+        });
+        if (!res.ok) throw new Error('Invalid token or no access');
+        const user = await res.json();
+        githubToken = token;
+        currentUser = user.login;
+        isAdmin = currentUser === ADMIN_USER;
+
+        userDisplay.textContent = currentUser;
+        userAvatar.textContent  = currentUser[0].toUpperCase();
+        if (isAdmin) adminBadge.style.display = 'inline';
+        if (isAdmin) importBtn.style.display  = 'flex';
+        userChip.style.display = 'flex';
+        statusDot.style.display = 'block';
+
+        loginOverlay.style.display = 'none';
+        await loadDatasetList();
+        setInterval(refreshData, 30000);
+        showToast(`Welcome back, ${currentUser}!`, 'success');
+    } catch (e) {
+        loginError.textContent = '⚠ ' + e.message;
+        loginError.style.display = 'block';
+        loginBtn.disabled = false;
+        loginBtn.innerHTML = '<i class="fab fa-github"></i> &nbsp;Connect to GitHub';
+    }
+};
+
+// ─── DATASETS ─────────────────────────────────────────────────────
+async function loadDatasetList() {
+    const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/`, {
+        headers: { 'Authorization': `token ${githubToken}` }
+    });
+    const files = await res.json();
+    const datasets = files.filter(f => f.name.endsWith('.json') && f.name !== 'lock.json');
+    datasetSelect.innerHTML = '<option value="">Select Dataset…</option>' +
+        datasets.map(d => `<option value="${d.name}">${d.name.replace('.json','')}</option>`).join('');
+}
+
+datasetSelect.onchange = (e) => {
+    currentDataset = e.target.value;
+    if (currentDataset) { selectedRuleId = null; refreshData(); }
+};
+
+// ─── DATA REFRESH ─────────────────────────────────────────────────
+async function refreshData() {
+    if (!currentDataset) return;
+    try {
+        const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${currentDataset}`, {
+            headers: { 'Authorization': `token ${githubToken}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            dataSha  = data.sha;
+            allRules = JSON.parse(atob(data.content));
+        }
+        const lockRes = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/lock.json`, {
+            headers: { 'Authorization': `token ${githubToken}` }
+        });
+        if (lockRes.ok) {
+            const lockData = await lockRes.json();
+            lockSha = lockData.sha;
+            locks   = JSON.parse(atob(lockData.content));
+        } else { locks = {}; lockSha = null; }
+
+        renderTags();
+        if (selectedRuleId) renderEditor();
+    } catch (e) { console.error('Sync error:', e); }
+}
+
+// ─── TAG LIST ─────────────────────────────────────────────────────
+function renderTags() {
+    const filter = searchInput.value.toLowerCase();
+    const filtered = allRules.filter(r => r.iso20022XmlTag.toLowerCase().includes(filter));
+    tagCount.textContent = `${filtered.length} tag${filtered.length !== 1 ? 's' : ''}`;
+
+    if (!filtered.length) {
+        tagList.innerHTML = `<div class="empty-state"><i class="fas fa-search"></i><p>No tags match your search</p></div>`;
+        return;
+    }
+
+    tagList.innerHTML = filtered.map(rule => {
+        const lockedByMe    = locks[rule.id] === currentUser;
+        const lockedByOther = locks[rule.id] && !lockedByMe;
+        const initials = rule.iso20022XmlTag.replace(/[^A-Z]/g, '').slice(0,2) || '##';
+        return `
+        <div class="tag-item ${rule.id === selectedRuleId ? 'active' : ''}" onclick="selectTag('${rule.id}')">
+            <div class="tag-icon">${initials}</div>
+            <div class="tag-info">
+                <div class="tag-name">${rule.iso20022XmlTag}</div>
+                <div class="tag-path">${rule.iso20022XmlPath.substring(0,38)}…</div>
             </div>
-            <div class="col-md-9 content">
-                <nav class="navbar navbar-light bg-light mb-4 px-3 shadow-sm rounded d-flex justify-content-between">
-                    <span class="navbar-brand mb-0 h1">Rules Manager</span>
-                    <div id="userInfo" class="d-flex align-items-center">
-                        <input type="file" id="excelImport" style="display:none" accept=".xlsx, .xlsm">
-                        <div id="adminControls" style="display:none">
-                            <button class="btn btn-sm btn-outline-success" onclick="document.getElementById('excelImport').click()">
-                                <i class="fas fa-file-excel"></i> Import Excel
-                            </button>
-                        </div>
-                        <span id="currentUserDisplay" class="badge bg-dark ms-2"></span>
-                        <button id="viewHistoryBtn" class="btn btn-sm btn-outline-secondary ms-2">Commits</button>
-                    </div>
-                </nav>
-                <div id="editorArea"></div>
-                <div id="historyArea" style="display: none;">
-                    <h4>Commit History</h4>
-                    <div id="historyList" class="mt-3"></div>
+            ${lockedByOther ? `<i class="fas fa-lock lock-icon" title="Locked by ${locks[rule.id]}"></i>` : ''}
+            ${lockedByMe    ? `<i class="fas fa-pen lock-icon lock-me" title="You're editing"></i>` : ''}
+        </div>`;
+    }).join('');
+}
+
+function selectTag(id) {
+    selectedRuleId = id;
+    welcomeScreen.style.display = 'none';
+    historyArea.style.display   = 'none';
+    historyBtn.classList.remove('active');
+    editorArea.style.display    = 'block';
+    renderEditor();
+    renderTags();
+}
+
+// ─── EDITOR ───────────────────────────────────────────────────────
+function renderEditor() {
+    const rule = allRules.find(r => r.id === selectedRuleId);
+    if (!rule) return;
+    const lockedByMe    = locks[rule.id] === currentUser;
+    const lockedByOther = locks[rule.id] && !lockedByMe;
+
+    editorArea.innerHTML = `
+        <div class="editor-header">
+            <div class="editor-tag-icon">${(rule.iso20022XmlTag.replace(/[^A-Z]/g,'')||'##').slice(0,2)}</div>
+            <div>
+                <h2>${rule.iso20022XmlTag}</h2>
+                <div class="editor-path">${rule.iso20022XmlPath}</div>
+            </div>
+        </div>
+
+        ${lockedByOther ? `<div class="lock-banner locked-other"><i class="fas fa-lock"></i> Currently being edited by <strong>${locks[rule.id]}</strong></div>` : ''}
+        ${lockedByMe    ? `<div class="lock-banner locked-me"><i class="fas fa-pen"></i> You have this tag locked for editing</div>` : ''}
+
+        <div class="fields-grid">
+            <div class="field-card">
+                <div class="field-card-head">
+                    <span class="field-card-badge">Group B</span>
+                    <span class="field-card-title">STD IN — Content Rules</span>
                 </div>
+                <textarea id="stdIn" class="field-textarea" ${!lockedByMe ? 'disabled' : ''} placeholder="No rules defined yet…">${rule.stdInContentRules || ''}</textarea>
+            </div>
+            <div class="field-card">
+                <div class="field-card-head">
+                    <span class="field-card-badge blue">Group C</span>
+                    <span class="field-card-title">STD OUT — Content Rules</span>
+                </div>
+                <textarea id="stdOut" class="field-textarea" ${!lockedByMe ? 'disabled' : ''} placeholder="No rules defined yet…">${rule.stdOutContentRules || ''}</textarea>
             </div>
         </div>
-    </div>
 
-    <!-- Excel Parsing Library -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-    <script src="app.js"></script>
+        <div class="editor-actions">
+            ${!locks[rule.id]
+                ? `<button class="btn-action btn-edit" onclick="toggleLock('${rule.id}', true)"><i class="fas fa-pen"></i> Start Editing</button>`
+                : lockedByMe
+                    ? `<button class="btn-action btn-commit" onclick="saveChanges()"><i class="fas fa-check"></i> Commit Changes</button>
+                       <button class="btn-action btn-cancel" onclick="toggleLock('${rule.id}', false)"><i class="fas fa-times"></i> Cancel</button>`
+                    : `<button class="btn-action btn-disabled" disabled><i class="fas fa-eye"></i> View Only</button>`
+            }
+        </div>
+    `;
+}
+
+// ─── LOCK / SAVE ──────────────────────────────────────────────────
+async function toggleLock(id, lock) {
+    if (lock) locks[id] = currentUser;
+    else delete locks[id];
+    await updateFile('lock.json', JSON.stringify(locks), lockSha, lock ? 'Locking tag' : 'Unlocking tag');
+    await refreshData();
+    showToast(lock ? 'Tag locked — you can now edit' : 'Lock released', lock ? 'info' : 'success');
+}
+
+async function saveChanges() {
+    const rule = allRules.find(r => r.id === selectedRuleId);
+    rule.stdInContentRules  = document.getElementById('stdIn').value;
+    rule.stdOutContentRules = document.getElementById('stdOut').value;
+    delete locks[rule.id];
+
+    await updateFile(currentDataset, JSON.stringify(allRules, null, 2), dataSha, `Update ${rule.iso20022XmlTag}`);
+    await updateFile('lock.json', JSON.stringify(locks), lockSha, 'Releasing lock');
+    showToast('Changes committed to GitHub!', 'success');
+    await refreshData();
+}
+
+async function updateFile(path, content, sha, message) {
+    const body = { message, content: btoa(unescape(encodeURIComponent(content))) };
+    if (sha) body.sha = sha;
+    return fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${path}`, {
+        method: 'PUT',
+        headers: { 'Authorization': `token ${githubToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+}
+
+// ─── HISTORY ──────────────────────────────────────────────────────
+historyBtn.onclick = async () => {
+    const isShowing = historyArea.style.display === 'block';
+    if (isShowing) {
+        historyArea.style.display = 'none';
+        historyBtn.classList.remove('active');
+        if (selectedRuleId) { editorArea.style.display = 'block'; welcomeScreen.style.display = 'none'; }
+        else welcomeScreen.style.display = 'flex';
+        return;
+    }
+    historyBtn.classList.add('active');
+    editorArea.style.display    = 'none';
+    welcomeScreen.style.display = 'none';
+    historyArea.style.display   = 'block';
+    historyList.innerHTML = '<div class="empty-state"><i class="fas fa-circle-notch fa-spin"></i><p>Loading commits…</p></div>';
+
+    if (!currentDataset) {
+        historyList.innerHTML = '<div class="empty-state"><i class="fas fa-info-circle"></i><p>Select a dataset first</p></div>';
+        return;
+    }
+    const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits?path=${currentDataset}`, {
+        headers: { 'Authorization': `token ${githubToken}` }
+    });
+    const commits = await res.json();
+    if (!commits.length) { historyList.innerHTML = '<div class="empty-state"><i class="fas fa-history"></i><p>No commits yet</p></div>'; return; }
+    historyList.innerHTML = commits.map(c => `
+        <div class="commit-card">
+            <div class="commit-author"><i class="fab fa-github gh-icon"></i> ${c.commit.author.name}</div>
+            <div class="commit-msg">${c.commit.message}</div>
+            <div class="commit-time"><i class="fas fa-clock" style="margin-right:4px"></i>${new Date(c.commit.author.date).toLocaleString()}</div>
+        </div>
+    `).join('');
+};
+
+// ─── EXCEL IMPORT ─────────────────────────────────────────────────
+excelImport.addEventListener('change', (e) => {
+    if (!isAdmin) { showToast('Only admin can import Excel files', 'error'); return; }
+    const file = e.target.files[0];
+    const fileName = file.name.replace(/\.[^/.]+$/, '') + '.json';
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+        const wb = XLSX.read(evt.target.result, { type: 'binary' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        const newRules = json.slice(1).map((row, i) => ({
+            id: 'rule_' + i,
+            iso20022XmlTag: row[3] || 'Unnamed Tag',
+            iso20022XmlPath: row[4] || 'No Path',
+            stdInContentRules: row[8] || '',
+            stdOutContentRules: row[10] || ''
+        })).filter(r => r.iso20022XmlTag !== 'Unnamed Tag');
+
+        const check = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${fileName}`, {
+            headers: { 'Authorization': `token ${githubToken}` }
+        });
+        if (check.ok) {
+            if (!confirm(`Dataset "${fileName}" already exists. Overwrite?`)) return;
+            const existing = await check.json();
+            await updateFile(fileName, JSON.stringify(newRules, null, 2), existing.sha, 'Overwriting dataset');
+        } else {
+            await updateFile(fileName, JSON.stringify(newRules, null, 2), null, 'Initial import');
+        }
+        showToast(`Imported ${newRules.length} rules from Excel`, 'success');
+        await loadDatasetList();
+    };
+    reader.readAsBinaryString(file);
+    excelImport.value = '';
+});
+
+searchInput.oninput = renderTags;
+</script>
 </body>
 </html>
