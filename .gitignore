@@ -1,15 +1,10 @@
-*.iml
-.gradle
-/local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
+# Ignore everything
+/*
+
+# Except these files
+!/.gitignore
+!/index.html
+!/app.js
+!/data.json
+!/lock.json
+!/Masterslide_Camt_052_Version 15.1_20231220_NL2023.4.WL_TESTSMallTest.xlsm
