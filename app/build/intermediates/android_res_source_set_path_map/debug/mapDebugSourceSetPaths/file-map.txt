@@ -1,0 +1,8 @@
+com.example.masterslides.app-pngs-0 C:\Users\a749080\AndroidStudioProjects\MasterSlides\app\build\generated\res\pngs\debug
+com.example.masterslides.app-res-1 C:\Users\a749080\AndroidStudioProjects\MasterSlides\app\build\generated\res\processDebugGoogleServices
+com.example.masterslides.app-updated_navigation_xml-2 C:\Users\a749080\AndroidStudioProjects\MasterSlides\app\build\generated\updated_navigation_xml\debug
+com.example.masterslides.app-packageDebugResources-3 C:\Users\a749080\AndroidStudioProjects\MasterSlides\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.example.masterslides.app-packageDebugResources-4 C:\Users\a749080\AndroidStudioProjects\MasterSlides\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.example.masterslides.app-debug-5 C:\Users\a749080\AndroidStudioProjects\MasterSlides\app\build\intermediates\merged_res\debug\mergeDebugResources
+com.example.masterslides.app-debug-6 C:\Users\a749080\AndroidStudioProjects\MasterSlides\app\src\debug\res
+com.example.masterslides.app-main-7 C:\Users\a749080\AndroidStudioProjects\MasterSlides\app\src\main\res

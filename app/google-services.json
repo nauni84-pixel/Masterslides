@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1045688363447",
+    "project_id": "masterslides-ed702",
+    "storage_bucket": "masterslides-ed702.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1045688363447:android:af376dd42e1d93a3f82032",
+        "android_client_info": {
+          "package_name": "com.example.masterslides"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBR2BfB5HNBnUpSv6HyoBr-nA6sMvC1kLk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
