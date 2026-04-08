@@ -15,69 +15,65 @@ let isAdmin = false;
 const ADMIN_USER = "nauni84-pixel";
 
 // DOM Elements
-const homePage = document.getElementById('homePage');
-const mainApp = document.getElementById('mainApp');
-const datasetSummary = document.getElementById('datasetSummary');
-const tagList = document.getElementById('tagList');
-const searchInput = document.getElementById('searchInput');
-const editorArea = document.getElementById('editorArea');
-const historyArea = document.getElementById('historyArea');
-const historyList = document.getElementById('historyList');
-const viewHistoryBtn = document.getElementById('viewHistoryBtn');
-const tokenModal = document.getElementById('tokenModal');
-const excelImport = document.getElementById('excelImport');
-const adminControlsHome = document.getElementById('adminControlsHome');
+const getEl = (id) => document.getElementById(id);
 
-document.getElementById('saveConfigBtn').onclick = () => {
-    githubToken = document.getElementById('githubToken').value;
-    if (!githubToken) return alert("Token required");
-    tokenModal.style.display = 'none';
-    initApp();
-};
+document.addEventListener('DOMContentLoaded', () => {
+    const saveConfigBtn = getEl('saveConfigBtn');
+    if (saveConfigBtn) {
+        saveConfigBtn.onclick = () => {
+            githubToken = getEl('githubToken').value;
+            if (!githubToken) return alert("Token required");
+            const tokenModal = getEl('tokenModal');
+            if (tokenModal) tokenModal.style.display = 'none';
+            initApp();
+        };
+    }
+});
 
 async function initApp() {
     try {
-        console.log("Attempting to authenticate with GitHub...");
         const userRes = await fetch('https://api.github.com/user', {
             headers: { 'Authorization': `token ${githubToken}` }
         });
 
-        if (userRes.status === 401) {
-            throw new Error("Invalid Token. Please check your Personal Access Token.");
-        }
-
-        if (!userRes.ok) {
-            throw new Error(`GitHub API Error: ${userRes.statusText}`);
-        }
+        if (!userRes.ok) throw new Error("Authentication failed");
 
         const userData = await userRes.json();
         currentUser = userData.login;
         isAdmin = (currentUser === ADMIN_USER);
 
-        console.log("Authenticated as:", currentUser);
-        document.getElementById('currentUserDisplay').innerText = currentUser;
-        if (isAdmin) adminControlsHome.style.display = 'block';
+        const currentUserDisplay = getEl('currentUserDisplay');
+        if (currentUserDisplay) currentUserDisplay.innerText = currentUser;
+
+        const adminControlsHome = getEl('adminControlsHome');
+        if (isAdmin && adminControlsHome) adminControlsHome.style.display = 'block';
 
         await loadHome();
         setInterval(refreshData, 30000);
     } catch (e) {
-        console.error("Auth Error:", e);
         alert("GitHub Auth Failed: " + e.message);
-        tokenModal.style.display = 'flex';
+        const tokenModal = getEl('tokenModal');
+        if (tokenModal) tokenModal.style.display = 'flex';
     }
 }
 
 async function loadHome() {
-    homePage.style.display = 'block';
-    mainApp.style.display = 'none';
-    datasetSummary.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div><p>Loading Hub...</p></div>';
+    const homePage = getEl('homePage');
+    const mainApp = getEl('mainApp');
+    const datasetSummary = getEl('datasetSummary');
 
-    const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/`, {
+    if (homePage) homePage.style.display = 'block';
+    if (mainApp) mainApp.style.display = 'none';
+    if (datasetSummary) datasetSummary.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div><p>Syncing Hub...</p></div>';
+
+    // Added cache-busting timestamp to see new imports immediately
+    const timestamp = new Date().getTime();
+    const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/?t=${timestamp}`, {
         headers: { 'Authorization': `token ${githubToken}` }
     });
 
     if (!res.ok) {
-        datasetSummary.innerHTML = `<div class="alert alert-danger">Error loading repository: ${res.statusText}</div>`;
+        if (datasetSummary) datasetSummary.innerHTML = `<div class="alert alert-danger">Error loading repository files.</div>`;
         return;
     }
 
@@ -86,14 +82,14 @@ async function loadHome() {
 
     const cardsHtml = await Promise.all(datasets.map(async (d) => {
         try {
-            const commitRes = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits?path=${d.name}&per_page=1`, {
+            const commitRes = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits?path=${d.name}&per_page=1&t=${timestamp}`, {
                 headers: { 'Authorization': `token ${githubToken}` }
             });
             const commits = await commitRes.json();
             const lastCommit = commits[0];
-            const date = lastCommit ? new Date(lastCommit.commit.author.date).toLocaleDateString() : "N/A";
-            const author = lastCommit ? lastCommit.commit.author.name : "N/A";
-            const version = lastCommit ? lastCommit.sha.substring(0,7) : "N/A";
+            const date = lastCommit ? new Date(lastCommit.commit.author.date).toLocaleDateString() : "New";
+            const author = lastCommit ? lastCommit.commit.author.name : currentUser;
+            const version = lastCommit ? lastCommit.sha.substring(0,7) : "Draft";
 
             return `
                 <div class="col-md-4 mb-4">
@@ -110,41 +106,30 @@ async function loadHome() {
                     </div>
                 </div>
             `;
-        } catch (err) {
-            return `
-                <div class="col-md-4 mb-4">
-                    <div class="card h-100 border-0 shadow-sm">
-                        <div class="card-body">
-                            <h5 class="card-title">${d.name}</h5>
-                            <p class="text-danger small">Error loading details</p>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
+        } catch (err) { return ""; }
     }));
 
-    datasetSummary.innerHTML = cardsHtml.join('') || '<div class="col-12 text-center text-muted">No datasets found. Import one to start.</div>';
+    if (datasetSummary) datasetSummary.innerHTML = cardsHtml.join('') || '<div class="col-12 text-center text-muted">No datasets found. Import one to start.</div>';
 }
 
 function showHome() {
-    homePage.style.display = 'block';
-    mainApp.style.display = 'none';
     loadHome();
 }
 
 async function openDataset(name) {
     currentDataset = name;
-    document.getElementById('currentDatasetTitle').innerText = name.replace('.json', '');
-    homePage.style.display = 'none';
-    mainApp.style.display = 'flex';
+    const currentDatasetTitle = getEl('currentDatasetTitle');
+    if (currentDatasetTitle) currentDatasetTitle.innerText = name.replace('.json', '');
+
+    getEl('homePage').style.display = 'none';
+    getEl('mainApp').style.display = 'flex';
     await refreshData();
 }
 
 async function refreshData() {
     if (!currentDataset) return;
     try {
-        const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${currentDataset}`, {
+        const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${currentDataset}?t=${new Date().getTime()}`, {
             headers: { 'Authorization': `token ${githubToken}` }
         });
         const data = await res.json();
@@ -169,16 +154,19 @@ async function refreshData() {
 }
 
 function renderTags() {
-    const filter = searchInput.value.toLowerCase();
-    tagList.innerHTML = allRules
-        .filter(r => r.iso20022XmlTag.toLowerCase().includes(filter))
-        .map(rule => `
-            <div class="tag-item ${rule.id === selectedRuleId ? 'active' : ''}" onclick="selectTag('${rule.id}')">
-                <div class="fw-bold text-dark">${rule.iso20022XmlTag}</div>
-                <div class="small text-muted" style="font-size: 0.75rem;">${rule.iso20022XmlPath.substring(0, 40)}...</div>
-                ${locks[rule.id] ? `<span class="badge bg-danger lock-badge"><i class="fas fa-lock"></i> ${locks[rule.id]}</span>` : ''}
-            </div>
-        `).join('');
+    const filter = getEl('searchInput').value.toLowerCase();
+    const tagList = getEl('tagList');
+    if (tagList) {
+        tagList.innerHTML = allRules
+            .filter(r => r.iso20022XmlTag.toLowerCase().includes(filter))
+            .map(rule => `
+                <div class="tag-item ${rule.id === selectedRuleId ? 'active' : ''}" onclick="selectTag('${rule.id}')">
+                    <div class="fw-bold text-dark">${rule.iso20022XmlTag}</div>
+                    <div class="small text-muted" style="font-size: 0.75rem;">${rule.iso20022XmlPath.substring(0, 40)}...</div>
+                    ${locks[rule.id] ? `<span class="badge bg-danger lock-badge"><i class="fas fa-lock"></i> ${locks[rule.id]}</span>` : ''}
+                </div>
+            `).join('');
+    }
 }
 
 function selectTag(id) {
@@ -193,130 +181,119 @@ function renderEditor() {
     const isLockedByMe = locks[rule.id] === currentUser;
     const isLockedByOther = locks[rule.id] && locks[rule.id] !== currentUser;
 
-    editorArea.innerHTML = `
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h3>${rule.iso20022XmlTag}</h3>
-                <p class="text-muted small">${rule.iso20022XmlPath}</p>
-                <hr>
-                ${isLockedByOther ? `<div class="alert alert-warning py-1 small">Locked by ${locks[rule.id]}</div>` : ''}
+    const editorArea = getEl('editorArea');
+    if (editorArea) {
+        editorArea.innerHTML = `
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <h3>${rule.iso20022XmlTag}</h3>
+                    <p class="text-muted small">${rule.iso20022XmlPath}</p>
+                    <hr>
+                    ${isLockedByOther ? `<div class="alert alert-warning py-1 small">Locked by ${locks[rule.id]}</div>` : ''}
 
-                <div class="mb-3">
-                    <label class="form-label small">Group B: STD IN</label>
-                    <textarea id="stdIn" class="form-control" ${!isLockedByMe ? 'disabled' : ''}>${rule.stdInContentRules || ''}</textarea>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label small">Group C: STD OUT</label>
-                    <textarea id="stdOut" class="form-control" ${!isLockedByMe ? 'disabled' : ''}>${rule.stdOutContentRules || ''}</textarea>
-                </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Group B: STD IN</label>
+                        <textarea id="stdIn" class="form-control" ${!isLockedByMe ? 'disabled' : ''}>${rule.stdInContentRules || ''}</textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">Group C: STD OUT</label>
+                        <textarea id="stdOut" class="form-control" ${!isLockedByMe ? 'disabled' : ''}>${rule.stdOutContentRules || ''}</textarea>
+                    </div>
 
-                <div class="mt-3">
-                    ${!locks[rule.id] ?
-                        `<button onclick="toggleLock('${rule.id}', true)" class="btn btn-primary btn-sm">Start Editing</button>` :
-                        (isLockedByMe ?
-                            `<button onclick="saveChanges()" class="btn btn-success btn-sm">Commit Changes (New Version)</button>
-                             <button onclick="toggleLock('${rule.id}', false)" class="btn btn-link btn-sm text-muted">Cancel</button>` :
-                            `<button class="btn btn-secondary btn-sm" disabled>View Only</button>`)
-                    }
+                    <div class="mt-3">
+                        ${!locks[rule.id] ?
+                            `<button onclick="toggleLock('${rule.id}', true)" class="btn btn-primary btn-sm">Start Editing</button>` :
+                            (isLockedByMe ?
+                                `<button onclick="saveChanges()" class="btn btn-success btn-sm">Commit Changes</button>
+                                 <button onclick="toggleLock('${rule.id}', false)" class="btn btn-link btn-sm text-muted">Cancel</button>` :
+                                `<button class="btn btn-secondary btn-sm" disabled>View Only</button>`)
+                        }
+                    </div>
                 </div>
             </div>
-        </div>
-    `;
+        `;
+    }
 }
 
 async function toggleLock(id, lock) {
     if (lock) locks[id] = currentUser;
     else delete locks[id];
-
     await updateFile('lock.json', JSON.stringify(locks), lockSha, lock ? "Locking tag" : "Unlocking tag");
     await refreshData();
 }
 
 async function saveChanges() {
     const rule = allRules.find(r => r.id === selectedRuleId);
-    rule.stdInContentRules = document.getElementById('stdIn').value;
-    rule.stdOutContentRules = document.getElementById('stdOut').value;
-
+    rule.stdInContentRules = getEl('stdIn').value;
+    rule.stdOutContentRules = getEl('stdOut').value;
     delete locks[rule.id];
-
     await updateFile(currentDataset, JSON.stringify(allRules, null, 2), dataSha, `Update ${rule.iso20022XmlTag} in ${currentDataset}`);
     await updateFile('lock.json', JSON.stringify(locks), lockSha, "Releasing lock");
-
-    alert("Changes committed as a new version on GitHub!");
+    alert("Changes committed to GitHub!");
     await refreshData();
 }
 
 async function updateFile(path, content, sha, message) {
     return fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${path}`, {
         method: 'PUT',
-        headers: {
-            'Authorization': `token ${githubToken}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-            message: message,
-            content: btoa(content),
-            sha: sha
-        })
+        headers: { 'Authorization': `token ${githubToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: message, content: btoa(content), sha: sha })
     });
 }
 
-excelImport.addEventListener('change', (e) => {
-    if (!isAdmin) return alert("Only Admin can import Excel files.");
+document.addEventListener('DOMContentLoaded', () => {
+    const excelImport = getEl('excelImport');
+    if (excelImport) {
+        excelImport.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            const fileName = file.name.replace(/\.[^/.]+$/, "") + ".json";
+            const reader = new FileReader();
+            reader.onload = async (evt) => {
+                const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+                const json = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]], { header: 1 });
+                const newRules = json.slice(1).map((row, index) => ({
+                    id: 'rule_' + index,
+                    iso20022XmlTag: row[3] || "Unnamed Tag",
+                    iso20022XmlPath: row[4] || "No Path",
+                    stdInContentRules: row[8] || "",
+                    stdOutContentRules: row[10] || ""
+                })).filter(r => r.iso20022XmlTag !== "Unnamed Tag");
 
-    const file = e.target.files[0];
-    const fileName = file.name.replace(/\.[^/.]+$/, "") + ".json";
+                const check = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${fileName}`, {
+                    headers: { 'Authorization': `token ${githubToken}` }
+                });
 
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-        const data = evt.target.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-        const newRules = json.slice(1).map((row, index) => ({
-            id: 'rule_' + index,
-            iso20022XmlTag: row[3] || "Unnamed Tag",
-            iso20022XmlPath: row[4] || "No Path",
-            stdInContentRules: row[8] || "",
-            stdOutContentRules: row[10] || ""
-        })).filter(r => r.iso20022XmlTag !== "Unnamed Tag");
-
-        const check = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${fileName}`, {
-            headers: { 'Authorization': `token ${githubToken}` }
+                if (check.ok) {
+                    if (!confirm(`Warning: Dataset "${fileName}" already exists. Overwrite?`)) return;
+                    const existing = await check.json();
+                    await updateFile(fileName, JSON.stringify(newRules, null, 2), existing.sha, "Overwriting dataset");
+                } else {
+                    await updateFile(fileName, JSON.stringify(newRules, null, 2), null, "Initial import");
+                }
+                alert("Import successful! Loading Home...");
+                setTimeout(loadHome, 2000); // Wait for GitHub to index
+            };
+            reader.readAsBinaryString(file);
         });
-
-        if (check.ok) {
-            if (!confirm(`Warning: Dataset "${fileName}" already exists. Overwrite?`)) return;
-            const existing = await check.json();
-            await updateFile(fileName, JSON.stringify(newRules, null, 2), existing.sha, "Overwriting dataset");
-        } else {
-            await updateFile(fileName, JSON.stringify(newRules, null, 2), null, "Initial import");
-        }
-
-        alert("Import successful!");
-        loadHome();
-    };
-    reader.readAsBinaryString(file);
-});
-
-viewHistoryBtn.onclick = async () => {
-    const isHistory = historyArea.style.display === 'block';
-    historyArea.style.display = isHistory ? 'none' : 'block';
-    editorArea.style.display = isHistory ? 'block' : 'none';
-    if (!isHistory) {
-        const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits?path=${currentDataset}`, {
-            headers: { 'Authorization': `token ${githubToken}` }
-        });
-        const commits = await res.json();
-        historyList.innerHTML = commits.map(c => `
-            <div class="card history-card p-2 mb-2">
-                <div class="fw-bold">${c.commit.author.name}</div>
-                <div class="small">${c.commit.message}</div>
-                <div class="text-muted" style="font-size:0.7rem">${new Date(c.commit.author.date).toLocaleString()}</div>
-            </div>
-        `).join('');
     }
-};
 
-searchInput.oninput = renderTags;
+    getEl('viewHistoryBtn').onclick = async () => {
+        getEl('historyArea').style.display = (getEl('historyArea').style.display === 'none') ? 'block' : 'none';
+        getEl('editorArea').style.display = (getEl('historyArea').style.display === 'block') ? 'none' : 'block';
+        if (getEl('historyArea').style.display === 'block') {
+            const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits?path=${currentDataset}&t=${new Date().getTime()}`, {
+                headers: { 'Authorization': `token ${githubToken}` }
+            });
+            const commits = await res.json();
+            getEl('historyList').innerHTML = commits.map(c => `
+                <div class="card history-card p-2 mb-2">
+                    <div class="fw-bold text-primary">${c.commit.author.name}</div>
+                    <div class="small">${c.commit.message}</div>
+                    <div class="text-muted" style="font-size:0.7rem">${new Date(c.commit.author.date).toLocaleString()}</div>
+                </div>
+            `).join('');
+        }
+    };
+
+    getEl('searchInput').oninput = renderTags;
+});
