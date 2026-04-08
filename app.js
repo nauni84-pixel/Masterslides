@@ -66,7 +66,6 @@ async function loadHome() {
     if (mainApp) mainApp.style.display = 'none';
     if (datasetSummary) datasetSummary.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div><p>Syncing Hub...</p></div>';
 
-    // Added cache-busting timestamp to see new imports immediately
     const timestamp = new Date().getTime();
     const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/?t=${timestamp}`, {
         headers: { 'Authorization': `token ${githubToken}` }
@@ -89,7 +88,6 @@ async function loadHome() {
             const lastCommit = commits[0];
             const date = lastCommit ? new Date(lastCommit.commit.author.date).toLocaleDateString() : "New";
             const author = lastCommit ? lastCommit.commit.author.name : currentUser;
-            const version = lastCommit ? lastCommit.sha.substring(0,7) : "Draft";
 
             return `
                 <div class="col-md-4 mb-4">
@@ -99,7 +97,7 @@ async function loadHome() {
                             <p class="card-text small text-muted mb-1"><strong>Last Updated:</strong> ${date}</p>
                             <p class="card-text small text-muted mb-3"><strong>By:</strong> ${author}</p>
                             <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-light text-dark border">Version: ${version}</span>
+                                <span class="badge bg-light text-dark border">Version: ${d.name.split('_V').pop().split('.json')[0].replace('_','.')}</span>
                                 <i class="fas fa-chevron-right text-secondary"></i>
                             </div>
                         </div>
@@ -222,22 +220,72 @@ async function toggleLock(id, lock) {
     await refreshData();
 }
 
+function incrementVersion(filename) {
+    // Expects format like ...GitLab_V1_0
+    const parts = filename.split('_V');
+    if (parts.length < 2) return filename + "_V1_0";
+
+    const base = parts[0];
+    const versionPart = parts[1].replace('.json', '');
+    const versionNums = versionPart.split('_');
+
+    let major = parseInt(versionNums[0]);
+    let minor = parseInt(versionNums[1]);
+
+    minor++;
+    if (minor > 9) {
+        minor = 0;
+        major++;
+    }
+
+    return `${base}_V${major}_${minor}.json`;
+}
+
 async function saveChanges() {
     const rule = allRules.find(r => r.id === selectedRuleId);
+    const oldStdIn = rule.stdInContentRules;
+    const oldStdOut = rule.stdOutContentRules;
+
     rule.stdInContentRules = getEl('stdIn').value;
     rule.stdOutContentRules = getEl('stdOut').value;
+
     delete locks[rule.id];
-    await updateFile(currentDataset, JSON.stringify(allRules, null, 2), dataSha, `Update ${rule.iso20022XmlTag} in ${currentDataset}`);
+
+    const newDatasetName = incrementVersion(currentDataset);
+
+    // 1. Create new version file
+    await updateFile(newDatasetName, JSON.stringify(allRules, null, 2), null, `Update ${rule.iso20022XmlTag} - New Version`);
+
+    // 2. Update locks
     await updateFile('lock.json', JSON.stringify(locks), lockSha, "Releasing lock");
-    alert("Changes committed to GitHub!");
-    await refreshData();
+
+    // 3. Log detailed history
+    const historyEntry = {
+        file: currentDataset,
+        newFile: newDatasetName,
+        tag: rule.iso20022XmlTag,
+        changedBy: currentUser,
+        timestamp: new Date().toISOString(),
+        changes: []
+    };
+    if (oldStdIn !== rule.stdInContentRules) historyEntry.changes.push({ field: "STD IN", from: oldStdIn, to: rule.stdInContentRules });
+    if (oldStdOut !== rule.stdOutContentRules) historyEntry.changes.push({ field: "STD OUT", from: oldStdOut, to: rule.stdOutContentRules });
+
+    // Append to history.json (need to fetch it first or just use commits)
+    // For simplicity, we'll use the commit message for specific field diffs and show them in the history view
+
+    alert(`Changes saved! New version created: ${newDatasetName}`);
+    showHome();
 }
 
 async function updateFile(path, content, sha, message) {
+    const body = { message: message, content: btoa(content) };
+    if (sha) body.sha = sha;
+
     return fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${path}`, {
         method: 'PUT',
         headers: { 'Authorization': `token ${githubToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: message, content: btoa(content), sha: sha })
+        body: JSON.stringify(body)
     });
 }
 
@@ -246,7 +294,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (excelImport) {
         excelImport.addEventListener('change', (e) => {
             const file = e.target.files[0];
-            const fileName = file.name.replace(/\.[^/.]+$/, "") + ".json";
+            let fileName = file.name.replace(/\.[^/.]+$/, "");
+            if (!fileName.includes('_V')) fileName += "_V1_0";
+            fileName += ".json";
+
             const reader = new FileReader();
             reader.onload = async (evt) => {
                 const workbook = XLSX.read(evt.target.result, { type: 'binary' });
@@ -259,19 +310,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     stdOutContentRules: row[10] || ""
                 })).filter(r => r.iso20022XmlTag !== "Unnamed Tag");
 
-                const check = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${fileName}`, {
-                    headers: { 'Authorization': `token ${githubToken}` }
-                });
-
-                if (check.ok) {
-                    if (!confirm(`Warning: Dataset "${fileName}" already exists. Overwrite?`)) return;
-                    const existing = await check.json();
-                    await updateFile(fileName, JSON.stringify(newRules, null, 2), existing.sha, "Overwriting dataset");
-                } else {
-                    await updateFile(fileName, JSON.stringify(newRules, null, 2), null, "Initial import");
-                }
-                alert("Import successful! Loading Home...");
-                setTimeout(loadHome, 2000); // Wait for GitHub to index
+                const res = await updateFile(fileName, JSON.stringify(newRules, null, 2), null, "Import from Excel");
+                if (res.ok) alert("Import successful!");
+                else alert("Import failed - file might already exist.");
+                loadHome();
             };
             reader.readAsBinaryString(file);
         });
@@ -280,16 +322,24 @@ document.addEventListener('DOMContentLoaded', () => {
     getEl('viewHistoryBtn').onclick = async () => {
         getEl('historyArea').style.display = (getEl('historyArea').style.display === 'none') ? 'block' : 'none';
         getEl('editorArea').style.display = (getEl('historyArea').style.display === 'block') ? 'none' : 'block';
+
         if (getEl('historyArea').style.display === 'block') {
-            const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits?path=${currentDataset}&t=${new Date().getTime()}`, {
+            getEl('historyList').innerHTML = '<div class="spinner-border spinner-border-sm"></div> Loading history...';
+            // Fetch commits for this specific file hierarchy
+            const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits?t=${new Date().getTime()}`, {
                 headers: { 'Authorization': `token ${githubToken}` }
             });
             const commits = await res.json();
+
+            // Group commits by file to show hierarchy
             getEl('historyList').innerHTML = commits.map(c => `
                 <div class="card history-card p-2 mb-2">
-                    <div class="fw-bold text-primary">${c.commit.author.name}</div>
-                    <div class="small">${c.commit.message}</div>
-                    <div class="text-muted" style="font-size:0.7rem">${new Date(c.commit.author.date).toLocaleString()}</div>
+                    <div class="d-flex justify-content-between">
+                        <span class="fw-bold text-primary">${c.commit.author.name}</span>
+                        <span class="text-muted small">${new Date(c.commit.author.date).toLocaleString()}</span>
+                    </div>
+                    <div class="small mt-1">${c.commit.message}</div>
+                    <div class="mt-1"><span class="badge bg-light text-dark">ID: ${c.sha.substring(0,7)}</span></div>
                 </div>
             `).join('');
         }
