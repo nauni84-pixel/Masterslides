@@ -39,9 +39,9 @@
     "isoDataType": "Group field",
     "sepaCoreRequirements": "",
     "statusIsoEpc": "M",
-    "stdInContentRules": "",
+    "stdInContentRules": "Test Edit",
     "stdInComments": "",
-    "stdOutContentRules": "",
+    "stdOutContentRules": "Test Edit",
     "stdOutComments": ""
   },
   {
