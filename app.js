@@ -2,7 +2,7 @@
 let githubUser = "nauni84-pixel";
 let githubRepo = "MasterSlides";
 let githubToken = "";
-let currentDataset = ""; // Filename in repo
+let currentDataset = "";
 let dataSha = null;
 let lockSha = null;
 
@@ -12,9 +12,12 @@ let selectedRuleId = null;
 let currentUser = "";
 let isAdmin = false;
 
-const ADMIN_USER = "nauni84-pixel"; // Set your username here
+const ADMIN_USER = "nauni84-pixel";
 
 // DOM Elements
+const homePage = document.getElementById('homePage');
+const mainApp = document.getElementById('mainApp');
+const datasetSummary = document.getElementById('datasetSummary');
 const tagList = document.getElementById('tagList');
 const searchInput = document.getElementById('searchInput');
 const editorArea = document.getElementById('editorArea');
@@ -23,8 +26,7 @@ const historyList = document.getElementById('historyList');
 const viewHistoryBtn = document.getElementById('viewHistoryBtn');
 const tokenModal = document.getElementById('tokenModal');
 const excelImport = document.getElementById('excelImport');
-const datasetSelect = document.getElementById('datasetSelect');
-const adminControls = document.getElementById('adminControls');
+const adminControlsHome = document.getElementById('adminControlsHome');
 
 document.getElementById('saveConfigBtn').onclick = () => {
     githubToken = document.getElementById('githubToken').value;
@@ -35,40 +37,109 @@ document.getElementById('saveConfigBtn').onclick = () => {
 
 async function initApp() {
     try {
+        console.log("Attempting to authenticate with GitHub...");
         const userRes = await fetch('https://api.github.com/user', {
             headers: { 'Authorization': `token ${githubToken}` }
         });
-        if (!userRes.ok) throw new Error("Invalid Token");
+
+        if (userRes.status === 401) {
+            throw new Error("Invalid Token. Please check your Personal Access Token.");
+        }
+
+        if (!userRes.ok) {
+            throw new Error(`GitHub API Error: ${userRes.statusText}`);
+        }
+
         const userData = await userRes.json();
         currentUser = userData.login;
         isAdmin = (currentUser === ADMIN_USER);
 
+        console.log("Authenticated as:", currentUser);
         document.getElementById('currentUserDisplay').innerText = currentUser;
-        if (isAdmin) adminControls.style.display = 'block';
+        if (isAdmin) adminControlsHome.style.display = 'block';
 
-        await loadDatasetList();
+        await loadHome();
         setInterval(refreshData, 30000);
     } catch (e) {
+        console.error("Auth Error:", e);
         alert("GitHub Auth Failed: " + e.message);
         tokenModal.style.display = 'flex';
     }
 }
 
-async function loadDatasetList() {
+async function loadHome() {
+    homePage.style.display = 'block';
+    mainApp.style.display = 'none';
+    datasetSummary.innerHTML = '<div class="text-center p-5"><div class="spinner-border text-primary"></div><p>Loading Hub...</p></div>';
+
     const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/`, {
         headers: { 'Authorization': `token ${githubToken}` }
     });
+
+    if (!res.ok) {
+        datasetSummary.innerHTML = `<div class="alert alert-danger">Error loading repository: ${res.statusText}</div>`;
+        return;
+    }
+
     const files = await res.json();
     const datasets = files.filter(f => f.name.endsWith('.json') && f.name !== 'lock.json');
 
-    datasetSelect.innerHTML = '<option value="">Select Dataset</option>' +
-        datasets.map(d => `<option value="${d.name}">${d.name.replace('.json', '')}</option>`).join('');
+    const cardsHtml = await Promise.all(datasets.map(async (d) => {
+        try {
+            const commitRes = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits?path=${d.name}&per_page=1`, {
+                headers: { 'Authorization': `token ${githubToken}` }
+            });
+            const commits = await commitRes.json();
+            const lastCommit = commits[0];
+            const date = lastCommit ? new Date(lastCommit.commit.author.date).toLocaleDateString() : "N/A";
+            const author = lastCommit ? lastCommit.commit.author.name : "N/A";
+            const version = lastCommit ? lastCommit.sha.substring(0,7) : "N/A";
+
+            return `
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 dataset-card border-0 shadow-sm" onclick="openDataset('${d.name}')">
+                        <div class="card-body">
+                            <h5 class="card-title text-primary"><i class="fas fa-file-alt"></i> ${d.name.replace('.json', '')}</h5>
+                            <p class="card-text small text-muted mb-1"><strong>Last Updated:</strong> ${date}</p>
+                            <p class="card-text small text-muted mb-3"><strong>By:</strong> ${author}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="badge bg-light text-dark border">Version: ${version}</span>
+                                <i class="fas fa-chevron-right text-secondary"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } catch (err) {
+            return `
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 border-0 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title">${d.name}</h5>
+                            <p class="text-danger small">Error loading details</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+    }));
+
+    datasetSummary.innerHTML = cardsHtml.join('') || '<div class="col-12 text-center text-muted">No datasets found. Import one to start.</div>';
 }
 
-datasetSelect.onchange = (e) => {
-    currentDataset = e.target.value;
-    if (currentDataset) refreshData();
-};
+function showHome() {
+    homePage.style.display = 'block';
+    mainApp.style.display = 'none';
+    loadHome();
+}
+
+async function openDataset(name) {
+    currentDataset = name;
+    document.getElementById('currentDatasetTitle').innerText = name.replace('.json', '');
+    homePage.style.display = 'none';
+    mainApp.style.display = 'flex';
+    await refreshData();
+}
 
 async function refreshData() {
     if (!currentDataset) return;
@@ -76,11 +147,9 @@ async function refreshData() {
         const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${currentDataset}`, {
             headers: { 'Authorization': `token ${githubToken}` }
         });
-        if (res.ok) {
-            const data = await res.json();
-            dataSha = data.sha;
-            allRules = JSON.parse(atob(data.content));
-        }
+        const data = await res.json();
+        dataSha = data.sha;
+        allRules = JSON.parse(atob(data.content));
 
         const lockRes = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/lock.json`, {
             headers: { 'Authorization': `token ${githubToken}` }
@@ -170,7 +239,6 @@ async function saveChanges() {
 
     delete locks[rule.id];
 
-    // Every save creates a commit on GitHub automatically (Version Control)
     await updateFile(currentDataset, JSON.stringify(allRules, null, 2), dataSha, `Update ${rule.iso20022XmlTag} in ${currentDataset}`);
     await updateFile('lock.json', JSON.stringify(locks), lockSha, "Releasing lock");
 
@@ -193,7 +261,6 @@ async function updateFile(path, content, sha, message) {
     });
 }
 
-// Excel Import Logic
 excelImport.addEventListener('change', (e) => {
     if (!isAdmin) return alert("Only Admin can import Excel files.");
 
@@ -215,7 +282,6 @@ excelImport.addEventListener('change', (e) => {
             stdOutContentRules: row[10] || ""
         })).filter(r => r.iso20022XmlTag !== "Unnamed Tag");
 
-        // Check if exists
         const check = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/contents/${fileName}`, {
             headers: { 'Authorization': `token ${githubToken}` }
         });
@@ -229,7 +295,7 @@ excelImport.addEventListener('change', (e) => {
         }
 
         alert("Import successful!");
-        loadDatasetList();
+        loadHome();
     };
     reader.readAsBinaryString(file);
 });
