@@ -1,0 +1,72 @@
+[
+  {
+    "id": "rule_1",
+    "iso20022XmlTag": "ISO 20022\nXML tag",
+    "iso20022XmlPath": "ISO 20022\nXML Path",
+    "stdInContentRules": "",
+    "stdOutContentRules": "Comments \n(only for information)"
+  },
+  {
+    "id": "rule_2",
+    "iso20022XmlTag": "<BkToCstmrAcctRpt>",
+    "iso20022XmlPath": "No Path",
+    "stdInContentRules": "Test",
+    "stdOutContentRules": "Test"
+  },
+  {
+    "id": "rule_4",
+    "iso20022XmlTag": "<GrpHdr>",
+    "iso20022XmlPath": "GrpHdr",
+    "stdInContentRules": "",
+    "stdOutContentRules": ""
+  },
+  {
+    "id": "rule_5",
+    "iso20022XmlTag": "<MsgId>",
+    "iso20022XmlPath": "GrpHdr.MsgId",
+    "stdInContentRules": "",
+    "stdOutContentRules": "This is an identifier that must be unique across all submitting partners. "
+  },
+  {
+    "id": "rule_6",
+    "iso20022XmlTag": "<CreDtTm>",
+    "iso20022XmlPath": "GrpHdr.CreDtTm",
+    "stdInContentRules": "",
+    "stdOutContentRules": "per ISO description: Date and time at which the message was created.\n\nMust include TZ"
+  },
+  {
+    "id": "rule_8",
+    "iso20022XmlTag": "<Rpt>",
+    "iso20022XmlPath": "Rpt",
+    "stdInContentRules": "",
+    "stdOutContentRules": ""
+  },
+  {
+    "id": "rule_9",
+    "iso20022XmlTag": "<Id>",
+    "iso20022XmlPath": "Rpt.Id",
+    "stdInContentRules": "",
+    "stdOutContentRules": "Unique identifier of the report \n\nNot used to uniquely identify the report"
+  },
+  {
+    "id": "rule_10",
+    "iso20022XmlTag": "<Prtry>",
+    "iso20022XmlPath": "Rpt.Ntry.IntBkTxCd.Prtry",
+    "stdInContentRules": "",
+    "stdOutContentRules": ""
+  },
+  {
+    "id": "rule_11",
+    "iso20022XmlTag": "<NtryDtls>",
+    "iso20022XmlPath": "Rpt.Ntry.NtryDtls",
+    "stdInContentRules": "",
+    "stdOutContentRules": ""
+  },
+  {
+    "id": "rule_12",
+    "iso20022XmlTag": "<Btch>",
+    "iso20022XmlPath": "Rpt.Ntry.NtryDtls.Btch",
+    "stdInContentRules": "",
+    "stdOutContentRules": ""
+  }
+]
