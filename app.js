@@ -89,6 +89,13 @@ async function loadHome() {
             const date = lastCommit ? new Date(lastCommit.commit.author.date).toLocaleDateString() : "New";
             const author = lastCommit ? lastCommit.commit.author.name : currentUser;
 
+            // Extract version correctly from filename like _V1_0
+            let versionStr = "1.0";
+            if (d.name.includes('_V')) {
+                const vPart = d.name.split('_V').pop().split('.json')[0];
+                versionStr = vPart.replace('_', '.');
+            }
+
             return `
                 <div class="col-md-4 mb-4">
                     <div class="card h-100 dataset-card border-0 shadow-sm" onclick="openDataset('${d.name}')">
@@ -97,7 +104,7 @@ async function loadHome() {
                             <p class="card-text small text-muted mb-1"><strong>Last Updated:</strong> ${date}</p>
                             <p class="card-text small text-muted mb-3"><strong>By:</strong> ${author}</p>
                             <div class="d-flex justify-content-between align-items-center">
-                                <span class="badge bg-light text-dark border">Version: ${d.name.split('_V').pop().split('.json')[0].replace('_','.')}</span>
+                                <span class="badge bg-light text-dark border">Version: ${versionStr}</span>
                                 <i class="fas fa-chevron-right text-secondary"></i>
                             </div>
                         </div>
@@ -221,9 +228,9 @@ async function toggleLock(id, lock) {
 }
 
 function incrementVersion(filename) {
-    // Expects format like ...GitLab_V1_0
+    // Correctly split filename to find _V suffix
     const parts = filename.split('_V');
-    if (parts.length < 2) return filename + "_V1_0";
+    if (parts.length < 2) return filename.replace('.json', '') + "_V1_1.json";
 
     const base = parts[0];
     const versionPart = parts[1].replace('.json', '');
@@ -231,6 +238,10 @@ function incrementVersion(filename) {
 
     let major = parseInt(versionNums[0]);
     let minor = parseInt(versionNums[1]);
+
+    // Safety check for NaN
+    if (isNaN(major)) major = 1;
+    if (isNaN(minor)) minor = 0;
 
     minor++;
     if (minor > 9) {
@@ -243,12 +254,8 @@ function incrementVersion(filename) {
 
 async function saveChanges() {
     const rule = allRules.find(r => r.id === selectedRuleId);
-    const oldStdIn = rule.stdInContentRules;
-    const oldStdOut = rule.stdOutContentRules;
-
     rule.stdInContentRules = getEl('stdIn').value;
     rule.stdOutContentRules = getEl('stdOut').value;
-
     delete locks[rule.id];
 
     const newDatasetName = incrementVersion(currentDataset);
@@ -258,21 +265,6 @@ async function saveChanges() {
 
     // 2. Update locks
     await updateFile('lock.json', JSON.stringify(locks), lockSha, "Releasing lock");
-
-    // 3. Log detailed history
-    const historyEntry = {
-        file: currentDataset,
-        newFile: newDatasetName,
-        tag: rule.iso20022XmlTag,
-        changedBy: currentUser,
-        timestamp: new Date().toISOString(),
-        changes: []
-    };
-    if (oldStdIn !== rule.stdInContentRules) historyEntry.changes.push({ field: "STD IN", from: oldStdIn, to: rule.stdInContentRules });
-    if (oldStdOut !== rule.stdOutContentRules) historyEntry.changes.push({ field: "STD OUT", from: oldStdOut, to: rule.stdOutContentRules });
-
-    // Append to history.json (need to fetch it first or just use commits)
-    // For simplicity, we'll use the commit message for specific field diffs and show them in the history view
 
     alert(`Changes saved! New version created: ${newDatasetName}`);
     showHome();
@@ -295,6 +287,7 @@ document.addEventListener('DOMContentLoaded', () => {
         excelImport.addEventListener('change', (e) => {
             const file = e.target.files[0];
             let fileName = file.name.replace(/\.[^/.]+$/, "");
+            // Ensure first import uses _V1_0
             if (!fileName.includes('_V')) fileName += "_V1_0";
             fileName += ".json";
 
@@ -322,24 +315,22 @@ document.addEventListener('DOMContentLoaded', () => {
     getEl('viewHistoryBtn').onclick = async () => {
         getEl('historyArea').style.display = (getEl('historyArea').style.display === 'none') ? 'block' : 'none';
         getEl('editorArea').style.display = (getEl('historyArea').style.display === 'block') ? 'none' : 'block';
-
         if (getEl('historyArea').style.display === 'block') {
-            getEl('historyList').innerHTML = '<div class="spinner-border spinner-border-sm"></div> Loading history...';
-            // Fetch commits for this specific file hierarchy
+            getEl('historyList').innerHTML = '<div class="spinner-border spinner-border-sm"></div> Loading commits...';
             const res = await fetch(`https://api.github.com/repos/${githubUser}/${githubRepo}/commits?t=${new Date().getTime()}`, {
                 headers: { 'Authorization': `token ${githubToken}` }
             });
             const commits = await res.json();
-
-            // Group commits by file to show hierarchy
             getEl('historyList').innerHTML = commits.map(c => `
-                <div class="card history-card p-2 mb-2">
-                    <div class="d-flex justify-content-between">
-                        <span class="fw-bold text-primary">${c.commit.author.name}</span>
-                        <span class="text-muted small">${new Date(c.commit.author.date).toLocaleString()}</span>
+                <div class="card history-card p-2 mb-2 shadow-sm border-start border-primary border-4">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-dark"><i class="fas fa-user-edit"></i> ${c.commit.author.name}</span>
+                        <span class="text-muted" style="font-size:0.75rem">${new Date(c.commit.author.date).toLocaleString()}</span>
                     </div>
-                    <div class="small mt-1">${c.commit.message}</div>
-                    <div class="mt-1"><span class="badge bg-light text-dark">ID: ${c.sha.substring(0,7)}</span></div>
+                    <div class="mt-2 text-secondary small">${c.commit.message}</div>
+                    <div class="mt-1 d-flex justify-content-between">
+                        <span class="badge bg-light text-dark border">SHA: ${c.sha.substring(0,7)}</span>
+                    </div>
                 </div>
             `).join('');
         }
